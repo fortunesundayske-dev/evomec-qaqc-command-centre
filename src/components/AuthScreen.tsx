@@ -1,9 +1,9 @@
 import { FormEvent, useState } from 'react'
 import { KeyRound, LockKeyhole, Mail, ShieldCheck } from 'lucide-react'
-import { blink } from '@/blink/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { localAuth } from '@/lib/local-auth'
 
 export type AuthMode = 'sign-in' | 'request-access' | 'reset'
 
@@ -24,15 +24,14 @@ export function AuthScreen() {
 
     try {
       if (mode === 'reset') {
-        await blink.auth.sendPasswordResetEmail(email, { redirectUrl: `${window.location.origin}/app` })
+        await localAuth.requestPasswordReset(email)
         setMessage('If an account exists for that address, reset instructions have been sent.')
       } else if (mode === 'request-access') {
-        await blink.auth.signUp({ email, password, metadata: { displayName: name, accessStatus: 'pending' } })
-        await blink.auth.signOut()
+        await localAuth.requestAccess(email, password, name)
         setMessage('Your access request was submitted for administrator review.')
         setMode('sign-in')
       } else {
-        await blink.auth.signInWithEmail(email, password)
+        await localAuth.signIn(email, password)
       }
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : 'The request could not be completed.')

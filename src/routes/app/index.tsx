@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { motion } from 'framer-motion'
 import {
@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { AuthGate } from '@/components/AuthGate'
-import { blink } from '@/blink/client'
+import { localAuth } from '@/lib/local-auth'
 import { qaqcApi } from '@/lib/qaqc-api'
 
 export const Route = createFileRoute('/app/')({
@@ -68,9 +68,9 @@ function CommandCentre() {
   const [mobileNav, setMobileNav] = useState(false)
   const [notifications, setNotifications] = useState(false)
   const [availableProjects, setAvailableProjects] = useState(projects)
-  const user = blink.auth.currentUser()
+  const user = localAuth.getUser()
 
-  useMemo(() => {
+  useEffect(() => {
     let active = true
     void qaqcApi.projects().then(values => {
       if (active && values.length) setAvailableProjects(['All Projects', ...values])
@@ -86,7 +86,7 @@ function CommandCentre() {
     <div className={cn('min-h-dvh transition-[padding] duration-300', collapsed ? 'md:pl-[78px]' : 'md:pl-[272px]')}>
       <header className="sticky top-0 z-30 flex h-[76px] items-center justify-between gap-4 border-b border-border/80 bg-background/85 px-4 backdrop-blur-xl sm:px-7">
         <div className="flex min-w-0 items-center gap-3"><Button variant="ghost" size="icon" className="md:hidden" onClick={() => setMobileNav(true)} aria-label="Open navigation"><Menu className="size-5" /></Button><div className="min-w-0"><p className="hidden text-[10px] font-semibold uppercase tracking-[0.22em] text-primary sm:block">EVOMEC / QUALITY SYSTEM</p><h2 className="truncate text-sm font-semibold sm:text-base">{module === 'Overview' ? 'QA/QC Command Centre' : module}</h2></div></div>
-        <div className="flex items-center gap-2 sm:gap-4"><div className="relative hidden w-44 lg:block"><Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" /><Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search records…" className="h-9 border-border bg-card/70 pl-9 text-xs" /></div><div className="flex items-center gap-2 rounded-lg border border-border bg-card/60 px-2 py-1.5"><Building2 className="size-4 text-primary" /><select aria-label="Project selector" value={project} onChange={e => setProject(e.target.value)} className="max-w-[130px] bg-transparent text-xs font-medium outline-none sm:max-w-[180px]">{availableProjects.map(p => <option key={p} value={p} className="bg-card">{p}</option>)}</select></div><button aria-label="Notifications" onClick={() => setNotifications(v => !v)} className="relative rounded-lg p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground"><Bell className="size-5" /><span className="absolute right-1 top-1 size-1.5 rounded-full bg-accent" /></button><button type="button" onClick={() => void blink.auth.signOut()} className="hidden items-center gap-2 border-l border-border pl-3 text-left sm:flex"><div className="flex size-8 items-center justify-center rounded-full bg-primary/15 font-mono text-xs font-bold text-primary">{(user?.displayName || user?.email || 'U').slice(0, 2).toUpperCase()}</div><div><p className="max-w-[120px] truncate text-xs font-semibold">{user?.displayName || user?.email || 'User'}</p><p className="font-mono text-[10px] text-muted-foreground">{user?.role || 'QUALITY USER'}</p></div></button></div>
+        <div className="flex items-center gap-2 sm:gap-4"><div className="relative hidden w-44 lg:block"><Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" /><Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search records…" className="h-9 border-border bg-card/70 pl-9 text-xs" /></div><div className="flex items-center gap-2 rounded-lg border border-border bg-card/60 px-2 py-1.5"><Building2 className="size-4 text-primary" /><select aria-label="Project selector" value={project} onChange={e => setProject(e.target.value)} className="max-w-[130px] bg-transparent text-xs font-medium outline-none sm:max-w-[180px]">{availableProjects.map(p => <option key={p} value={p} className="bg-card">{p}</option>)}</select></div><button aria-label="Notifications" onClick={() => setNotifications(v => !v)} className="relative rounded-lg p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground"><Bell className="size-5" /><span className="absolute right-1 top-1 size-1.5 rounded-full bg-accent" /></button><button type="button" onClick={() => void localAuth.signOut()} className="hidden items-center gap-2 border-l border-border pl-3 text-left sm:flex"><div className="flex size-8 items-center justify-center rounded-full bg-primary/15 font-mono text-xs font-bold text-primary">{(user?.displayName || user?.email || 'U').slice(0, 2).toUpperCase()}</div><div><p className="max-w-[120px] truncate text-xs font-semibold">{user?.displayName || user?.email || 'User'}</p><p className="font-mono text-[10px] text-muted-foreground">{user?.role || 'QUALITY USER'}</p></div></button></div>
         {notifications && <div className="absolute right-4 top-[68px] w-80 rounded-xl border border-border bg-popover p-3 shadow-2xl"><div className="mb-3 flex items-center justify-between"><p className="text-sm font-semibold">Notifications</p><span className="rounded-full bg-accent/15 px-2 py-0.5 font-mono text-[10px] text-accent">4 NEW</span></div>{['NCR-2026-0017 is overdue', 'CTQ-2026-031 requires response', 'Calibration due in 10 days', 'Audit action approaching deadline'].map((n, i) => <div key={n} className="flex gap-2 border-t border-border py-2 text-xs"><span className={cn('mt-1 size-1.5 shrink-0 rounded-full', i === 0 ? 'bg-destructive' : 'bg-accent')} /><span>{n}</span></div>)}</div>}
       </header>
       <main className="relative mx-auto max-w-[1600px] px-4 py-6 sm:px-7 lg:px-9"><PageContent module={module} project={project} search={search} setModule={setModule} /></main>
@@ -112,9 +112,9 @@ function KpiDashboard() { const data = [{ name: 'Audit', target: 80, actual: 86 
 
 function Reports() { const reports = ['QA/QC Monthly Report', 'ITR Report', 'NCR Report', 'Audit Report', 'CTQ Report', 'Calibration Report', 'Project Quality Summary']; return <div className="space-y-6"><SectionTitle eyebrow="REPORTING CENTRE" title="Reports" action="Generate, review and export" /><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{reports.map((name, i) => <Card key={name} className="group border-border bg-card transition hover:-translate-y-1 hover:border-primary/40"><CardContent className="p-5"><div className="flex items-start justify-between"><div className="rounded-lg bg-primary/10 p-2.5 text-primary"><FileBarChart className="size-5" /></div><span className="font-mono text-[9px] text-muted-foreground">RPT-0{i + 1}</span></div><h3 className="mt-5 text-sm font-semibold">{name}</h3><p className="mt-2 text-xs leading-5 text-muted-foreground">Consolidated quality performance, ageing and action tracking for selected projects.</p><div className="mt-5 flex gap-2"><Button size="sm" className="bg-primary text-primary-foreground">Generate</Button><Button size="sm" variant="outline" className="border-border bg-transparent">Export</Button></div></CardContent></Card>)}</div></div> }
 function SystemPage({ module }: { module: ModuleKey }) {
-  if (module === 'Access / Admin' && !blink.auth.hasRole('admin')) {
+  if (module === 'Access / Admin' && !['admin', 'super_admin'].includes(localAuth.getUser()?.role || '')) {
     return <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-6 text-sm text-destructive">Administrator access is required for this area.</div>
   }
-  const user = blink.auth.currentUser()
+  const user = localAuth.getUser()
   return <div className="space-y-6"><SectionTitle eyebrow={`SYSTEM / ${module.toUpperCase()}`} title={module} action="Protected workspace" /><Card className="border-border bg-card"><CardContent className="flex min-h-72 flex-col items-center justify-center text-center"><div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">{module === 'Access / Admin' ? <Users className="size-7" /> : module === 'User Profile' ? <UserRound className="size-7" /> : <Activity className="size-7" />}</div><h2 className="mt-5 text-lg font-semibold">{module === 'Access / Admin' ? 'Access governance' : module === 'User Profile' ? (user?.displayName || user?.email || 'User profile') : 'Activity log'} </h2><p className="mt-2 max-w-md text-sm text-muted-foreground">{module === 'Access / Admin' ? 'Manage users, roles, approvals, restrictions and permissions across the quality system.' : 'This protected workspace is ready for API-backed records and audit history.'}</p><Button className="mt-5 gap-2 bg-primary text-primary-foreground"><Settings2 className="size-4" /> Configure view</Button></CardContent></Card></div>
 }
