@@ -5,8 +5,9 @@ const userKey = 'evomec_qaqc_user'
 const authEvent = 'evomec-auth-change'
 
 export const localAuth = {
-  getToken: () => localStorage.getItem(sessionKey),
+  getToken: () => typeof window === 'undefined' ? null : localStorage.getItem(sessionKey),
   getUser: (): LocalUser | null => {
+    if (typeof window === 'undefined') return null
     const value = localStorage.getItem(userKey)
     return value ? JSON.parse(value) as LocalUser : null
   },

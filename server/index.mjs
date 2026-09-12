@@ -1,5 +1,6 @@
 import 'dotenv/config'
 import express from 'express'
+import multer from 'multer'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -17,6 +18,7 @@ const localStorePath = path.resolve(process.env.LOCAL_AUTH_STORE || path.join(__
 const mongoClient = process.env.MONGODB_URI ? new MongoClient(process.env.MONGODB_URI) : null
 const sessions = new Map()
 const iterations = 310000
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } })
 
 app.use(express.json())
 app.use((_request, response, next) => {
@@ -45,7 +47,7 @@ function verifyPassword(password, user) {
   return candidate.length === stored.length && timingSafeEqual(candidate, stored)
 }
 function publicUser(user) {
-  return { id: user.id || user.username, email: user.email, displayName: user.displayName || user.name, role: user.role, status: user.status }
+  return { id: user.id || user.username, email: user.email, displayName: user.displayName || user.name, role: user.role, status: user.status, profilePhoto: user.profile_photo_asset || null }
 }
 function tokenFor(user) {
   const token = randomBytes(32).toString('hex')
@@ -161,6 +163,40 @@ app.post('/api/auth/password-reset', async (request, response) => {
   response.json({ message: 'If the account exists, reset instructions will be issued by the configured server mailer.' })
 })
 app.post('/api/auth/logout', authenticate, (request, response) => { sessions.delete(request.sessionToken); response.json({ ok: true }) })
+app.get('/api/profile', authenticate, async (request, response) => {
+  response.json(publicUser(request.user))
+})
+app.post('/api/profile/photo', authenticate, upload.single('photo'), async (request, response) => {
+  if (!request.file) return response.status(400).json({ error: 'A profile photo is required.' })
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(request.file.mimetype)) return response.status(400).json({ error: 'Only JPG, PNG, or WebP images are allowed.' })
+  if (!process.env.CLOUDINARY_URL) return response.status(503).json({ error: 'Cloudinary is not configured.' })
+  try {
+    cloudinary.config({ secure: true })
+    const username = String(request.user.username || request.user.email).replace(/[^a-zA-Z0-9_-]/g, '-')
+    const folder = process.env.CLOUDINARY_FOLDER || 'qaqc-command-centre'
+    const result = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream({ folder: `${folder}/profile-photos`, public_id: `${username}-${randomBytes(6).toString('hex')}`, resource_type: 'image', type: 'authenticated' }, (error, value) => error ? reject(error) : resolve(value))
+      stream.end(request.file.buffer)
+    })
+    const asset = { public_id: result.public_id, resource_type: result.resource_type, format: result.format, bytes: result.bytes, uploaded_at: new Date().toISOString() }
+    const users = await collection('users')
+    if (users) await users.updateOne({ username: request.user.username }, { $set: { profile_photo_asset: asset } })
+    await recordActivity({ action: 'upload_profile_photo', category: 'account', request, target: asset.public_id })
+    response.json({ profilePhoto: asset })
+  } catch (error) {
+    response.status(502).json({ error: `Profile photo upload failed: ${error instanceof Error ? error.message : 'Cloudinary error'}` })
+  }
+})
+app.patch('/api/admin/users/:username', requireAdmin, async (request, response) => {
+  const { role, status } = request.body || {}
+  if (!['admin', 'user', 'viewer'].includes(role) || !['pending', 'approved', 'restricted', 'rejected'].includes(status)) return response.status(400).json({ error: 'Invalid role or access status.' })
+  const users = await collection('users')
+  if (!users) return response.status(503).json({ error: 'MongoDB is required for access administration.' })
+  const result = await users.updateOne({ username: request.params.username }, { $set: { role, status } })
+  if (!result.matchedCount) return response.status(404).json({ error: 'User not found.' })
+  await recordActivity({ action: 'update_user_access', category: 'administration', request, target: request.params.username, details: { role, status } })
+  response.json({ ok: true })
+})
 app.post('/api/support/tickets', authenticate, async (request, response) => {
   const { subject, category, message } = request.body || {}
   if (!subject || !category || !message || String(message).trim().length < 10) return response.status(400).json({ error: 'Subject, category, and a message of at least 10 characters are required.' })

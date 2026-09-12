@@ -1,5 +1,5 @@
 export type QaqcRecord = Record<string, string | number | boolean | null>
-export type LocalUser = { id: string; email: string; displayName: string; role: string; status: string }
+export type LocalUser = { id: string; email: string; displayName: string; role: string; status: string; profilePhoto?: Record<string, string | number> | null }
 
 const apiBaseUrl = (import.meta.env.VITE_QAQC_API_URL || '').replace(/\/$/, '')
 
@@ -25,6 +25,14 @@ export const qaqcApi = {
   projects: () => request<string[]>('/api/projects'),
   standards: (query = '') => request<QaqcRecord[]>(`/api/standards?query=${encodeURIComponent(query)}`),
   adminUsers: () => request<QaqcRecord[]>('/api/admin/users'),
+  updateAdminUser: (username: string, updates: { role: string; status: string }) => request<{ ok: boolean }>(`/api/admin/users/${encodeURIComponent(username)}`, { method: 'PATCH', body: JSON.stringify(updates) }),
+  profile: () => request<LocalUser>('/api/profile'),
+  uploadProfilePhoto: (file: File) => {
+    const token = localStorage.getItem('evomec_qaqc_session')
+    const body = new FormData()
+    body.append('photo', file)
+    return fetch(`${apiBaseUrl}/api/profile/photo`, { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {}, body }).then(async response => { if (!response.ok) throw new Error((await response.json()).error || 'Profile photo upload failed.'); return response.json() as Promise<{ profilePhoto: LocalUser['profilePhoto'] }> })
+  },
   activity: () => request<QaqcRecord[]>('/api/admin/activity'),
   supportTickets: () => request<QaqcRecord[]>('/api/support/tickets'),
   adminSupportTickets: () => request<QaqcRecord[]>('/api/admin/support-tickets'),
