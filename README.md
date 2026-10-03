@@ -39,7 +39,7 @@ PowerShell installations that block `npm.ps1` should use `npm.cmd`, as shown. Th
 Invoke-RestMethod http://localhost:8000/health
 .\node_modules\.bin\tsc.cmd --noEmit
 .\node_modules\.bin\vite.cmd build
-py -3 -m streamlit run streamlit_app.py --server.headless true
+py -3 -m streamlit run app.py --server.headless true
 ```
 
 The React dashboard is backed by `data/QAQC_Master.xlsx`; it no longer displays hard-coded QA/QC demo records. Streamlit uses the same workbook path and MongoDB users, activity log, profile images, and administrator permissions. In React, administrators can add and update complete records in Daily Reports, KPI/KRA, CTQ, and other workbook modules. Forms are generated from the selected sheet's existing headers, and writes are restricted to mapped sheets and validated fields. Every workbook change records its module, row, and changed field names in the activity log without copying record contents. Non-admin users remain read-only. Streamlit retains its existing permitted date-field editing.

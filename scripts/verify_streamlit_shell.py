@@ -10,7 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(PROJECT_ROOT / ".env")
 sys.path.insert(0, str(PROJECT_ROOT))
 
-app = AppTest.from_file(str(PROJECT_ROOT / "streamlit_app.py"))
+app = AppTest.from_file(str(PROJECT_ROOT / "app.py"))
 app.session_state["user"] = {
     "username": os.environ.get("QAQC_BOOTSTRAP_ADMIN_EMAIL", "admin"),
     "email": os.environ.get("QAQC_BOOTSTRAP_ADMIN_EMAIL", "admin@example.invalid"),
