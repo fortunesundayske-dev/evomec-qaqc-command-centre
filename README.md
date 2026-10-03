@@ -42,4 +42,6 @@ Invoke-RestMethod http://localhost:8000/health
 py -3 -m streamlit run streamlit_app.py --server.headless true
 ```
 
-The React dashboard is backed by `data/QAQC_Master.xlsx`; it no longer displays hard-coded QA/QC demo records. Streamlit uses the same workbook path and MongoDB users, activity log, profile images, and administrator permissions. Administrators can update permitted date fields from either dashboard; each save writes to the source Excel row and is recorded in the activity log.
+The React dashboard is backed by `data/QAQC_Master.xlsx`; it no longer displays hard-coded QA/QC demo records. Streamlit uses the same workbook path and MongoDB users, activity log, profile images, and administrator permissions. In React, administrators can add and update complete records in Daily Reports, KPI/KRA, CTQ, and other workbook modules. Forms are generated from the selected sheet's existing headers, and writes are restricted to mapped sheets and validated fields. Every workbook change records its module, row, and changed field names in the activity log without copying record contents. Non-admin users remain read-only. Streamlit retains its existing permitted date-field editing.
+
+Workbook write regression tests run with `npm test`. The API limits JSON request bodies, sends security headers, restricts browser origins to `APP_ORIGIN`, and throttles failed sign-in attempts by client IP and email. Keep production secrets in deployment environment variables; `.env` files are ignored by Git.

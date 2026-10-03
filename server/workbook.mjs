@@ -122,6 +122,69 @@ function monthLabel(key) {
 export function createWorkbookStore(workbookPath) {
   let cache = { mtimeMs: -1, sheets: {}, sheetNames: [], updatedAt: null }
 
+  function sheetNamesForModule(module) {
+    return MODULE_SHEETS[module] || [module, `${module} Log`, `${module} Tracker`, `${module} Register`]
+  }
+
+  function assertModuleSheet(module, sheetName) {
+    if (!sheetNamesForModule(module).includes(sheetName)) {
+      throw new Error('The requested workbook sheet is not part of this module.')
+    }
+  }
+
+  function worksheet(workbook, sheetName) {
+    const sheet = workbook.Sheets[sheetName]
+    if (!sheet || !sheet['!ref']) throw new Error(`Workbook sheet "${sheetName}" was not found.`)
+    const range = XLSX.utils.decode_range(sheet['!ref'])
+    const headerRow = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', range: range.s.r })[0] || []
+    const headers = headerRow.map(value => String(value || '').trim()).filter(Boolean)
+    if (!headers.length) throw new Error(`Workbook sheet "${sheetName}" has no column headers.`)
+    return { sheet, range, headers }
+  }
+
+  function normalizedRecord(record, headers) {
+    if (!record || typeof record !== 'object' || Array.isArray(record)) throw new Error('A record with named field values is required.')
+    const entries = Object.entries(record)
+    if (!entries.length) throw new Error('Enter at least one field value.')
+    const allowed = new Set(headers)
+    const invalid = entries.map(([field]) => field).filter(field => !allowed.has(field))
+    if (invalid.length) throw new Error(`Unknown workbook field(s): ${invalid.join(', ')}.`)
+
+    const values = {}
+    for (const [field, value] of entries) {
+      if (value === null || value === '') { values[field] = null; continue }
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        if (typeof value === 'number' && !Number.isFinite(value)) throw new Error(`Field "${field}" must be a finite number.`)
+        values[field] = value
+        continue
+      }
+      throw new Error(`Field "${field}" must be text, a number, a boolean, or blank.`)
+    }
+    return values
+  }
+
+  function cellFromValue(field, value, currentCell = {}) {
+    if (value === null) return null
+    if (isDateColumn(field)) {
+      if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error(`Field "${field}" must use YYYY-MM-DD format.`)
+      const date = new Date(`${value}T00:00:00.000Z`)
+      if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) throw new Error(`Field "${field}" must be a valid YYYY-MM-DD date.`)
+      return { ...currentCell, t: 'd', v: date, z: currentCell.z || 'yyyy-mm-dd', f: undefined }
+    }
+    if (currentCell.t === 'n' && typeof value === 'string' && value.trim()) {
+      const numeric = Number(value)
+      if (!Number.isFinite(numeric)) throw new Error(`Field "${field}" must be a number.`)
+      return { ...currentCell, t: 'n', v: numeric, f: undefined }
+    }
+    if (currentCell.t === 'b' && typeof value === 'string') {
+      if (!['true', 'false'].includes(value.toLowerCase())) throw new Error(`Field "${field}" must be true or false.`)
+      return { ...currentCell, t: 'b', v: value.toLowerCase() === 'true', f: undefined }
+    }
+    if (typeof value === 'number') return { ...currentCell, t: 'n', v: value, f: undefined }
+    if (typeof value === 'boolean') return { ...currentCell, t: 'b', v: value, f: undefined }
+    return { ...currentCell, t: 's', v: String(value), f: undefined }
+  }
+
   function load() {
     if (!fs.existsSync(workbookPath)) {
       throw new Error(`QA/QC master workbook was not found at ${path.basename(workbookPath)}. Place QAQC_Master.xlsx in the data folder.`)
@@ -139,13 +202,69 @@ export function createWorkbookStore(workbookPath) {
 
   function rowsForModule(module) {
     const data = load()
-    const names = MODULE_SHEETS[module] || [module, `${module} Log`, `${module} Tracker`, `${module} Register`]
+    const names = sheetNamesForModule(module)
     return names.filter(name => data.sheets[name]).flatMap(name => data.sheets[name])
+  }
+
+  function fieldsForModule(module) {
+    const source = XLSX.readFile(workbookPath, { cellDates: true })
+    return sheetNamesForModule(module)
+      .filter(name => source.Sheets[name])
+      .flatMap(name => worksheet(source, name).headers)
+      .filter((field, index, fields) => fields.indexOf(field) === index)
+  }
+
+  function addRecord({ module, record }) {
+    const source = XLSX.readFile(workbookPath, { cellDates: true })
+    const sheetName = sheetNamesForModule(module).find(name => source.Sheets[name])
+    if (!sheetName) throw new Error('No workbook sheet is configured for this module.')
+    const { sheet, range, headers } = worksheet(source, sheetName)
+    const values = normalizedRecord(record, headers)
+    const rowNumber = range.e.r + 1
+    for (const [index, field] of headers.entries()) {
+      const column = range.s.c + index
+      const sampleAddress = XLSX.utils.encode_cell({ r: Math.min(range.s.r + 1, range.e.r), c: column })
+      const address = XLSX.utils.encode_cell({ r: rowNumber, c: column })
+      const value = values[field] ?? null
+      const cell = cellFromValue(field, value, sheet[sampleAddress] || {})
+      if (cell) sheet[address] = cell
+    }
+    sheet['!ref'] = XLSX.utils.encode_range({ s: range.s, e: { r: rowNumber, c: Math.max(range.e.c, range.s.c + headers.length - 1) } })
+    XLSX.writeFile(source, workbookPath, { cellDates: true })
+    cache.mtimeMs = -1
+    return { module, sheetName, rowNumber, fields: Object.keys(values) }
+  }
+
+  function updateRecord({ module, sheetName, rowNumber, record }) {
+    assertModuleSheet(module, sheetName)
+    if (!Number.isInteger(rowNumber) || rowNumber < 1) throw new Error('An exact workbook row is required.')
+    const source = XLSX.readFile(workbookPath, { cellDates: true })
+    const { sheet, range, headers } = worksheet(source, sheetName)
+    if (rowNumber <= range.s.r || rowNumber > range.e.r) throw new Error('The workbook row no longer exists.')
+    const values = normalizedRecord(record, headers)
+    for (const [field, value] of Object.entries(values)) {
+      const column = headers.indexOf(field) + range.s.c
+      const address = XLSX.utils.encode_cell({ r: rowNumber, c: column })
+      const cell = cellFromValue(field, value, sheet[address] || {})
+      if (cell) sheet[address] = cell
+      else delete sheet[address]
+    }
+    XLSX.writeFile(source, workbookPath, { cellDates: true })
+    cache.mtimeMs = -1
+    return { module, sheetName, rowNumber, fields: Object.keys(values) }
   }
 
   function filterProject(rows, project) {
     if (!project || project === 'All Projects') return rows
     return rows.filter(row => projectOf(row) === project)
+  }
+
+  function filterKpiProject(rows, project) {
+    if (!project || project === 'All Projects') return rows
+    return rows.filter(row => {
+      const rowProject = projectOf(row)
+      return !rowProject || rowProject === project
+    })
   }
 
   function projects() {
@@ -287,5 +406,5 @@ export function createWorkbookStore(workbookPath) {
     return { sheetName, rowNumber, field: String(field).trim(), value }
   }
 
-  return { load, rowsForModule, filterProject, projects, summary, info, updateDate, workbookPath }
+  return { load, rowsForModule, fieldsForModule, addRecord, updateRecord, filterProject, filterKpiProject, projects, summary, info, updateDate, workbookPath }
 }

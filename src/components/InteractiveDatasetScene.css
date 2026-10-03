@@ -1,0 +1,242 @@
+.dataset-hub {
+  overflow: hidden;
+  border: 1px solid rgba(104, 161, 214, 0.2);
+  border-radius: 14px;
+  background: #071321;
+  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.28);
+}
+
+.dataset-hub__topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 74px;
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(104, 161, 214, 0.16);
+  background: linear-gradient(100deg, rgba(15, 38, 63, 0.88), rgba(7, 19, 33, 0.94));
+}
+
+.dataset-hub__eyebrow,
+.dataset-hub__status,
+.dataset-hub__orbit-caption,
+.dataset-hub-readout__eyebrow {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.dataset-hub__eyebrow { color: #53c8ed; }
+.dataset-hub__topline h3 { margin: 4px 0 0; font-size: 17px; font-weight: 600; }
+
+.dataset-hub__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  color: #9ab5c8;
+  font-size: 8px;
+}
+
+.dataset-hub__status i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #49dfa2;
+  box-shadow: 0 0 10px rgba(73, 223, 162, 0.85);
+  animation: dataset-pulse 1.8s ease-in-out infinite;
+}
+
+.dataset-hub__status.is-offline i { background: #ff7584; box-shadow: 0 0 10px rgba(255, 117, 132, 0.75); }
+
+.dataset-hub__canvas {
+  position: relative;
+  height: clamp(430px, 52vw, 590px);
+  min-height: 430px;
+  overflow: hidden;
+  isolation: isolate;
+  background: radial-gradient(ellipse at 50% 45%, rgba(16, 69, 131, 0.54), transparent 47%), linear-gradient(155deg, #0d1c30 0%, #071321 57%, #06101d 100%);
+}
+
+.dataset-hub__canvas canvas { position: relative; z-index: 1; display: block; touch-action: pan-y; }
+
+.dataset-hub__orbit {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  pointer-events: none;
+}
+
+.dataset-hub__grid {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.18;
+  background-image: linear-gradient(rgba(83, 200, 237, 0.18) 1px, transparent 1px), linear-gradient(90deg, rgba(83, 200, 237, 0.18) 1px, transparent 1px);
+  background-size: 46px 46px;
+  mask-image: radial-gradient(ellipse at center, #000 10%, transparent 76%);
+}
+
+.dataset-orbit-tile {
+  position: absolute;
+  display: grid;
+  width: clamp(96px, 10vw, 122px);
+  min-height: 74px;
+  grid-template-columns: 28px 1fr;
+  align-content: center;
+  align-items: center;
+  gap: 7px 8px;
+  padding: 11px;
+  border: 1px solid color-mix(in srgb, var(--tile-color) 48%, rgba(217, 234, 255, 0.34));
+  border-radius: 8px;
+  background: linear-gradient(145deg, rgba(248, 252, 255, 0.98), rgba(218, 232, 247, 0.96));
+  color: #10243a;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.42), 0 0 20px color-mix(in srgb, var(--tile-color) 25%, transparent);
+  cursor: pointer;
+  text-align: left;
+  transform: translateZ(0);
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  pointer-events: auto;
+  translate: -50% -50%;
+}
+
+.dataset-orbit-tile:hover,
+.dataset-orbit-tile.is-selected {
+  border-color: var(--tile-color);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5), 0 0 24px color-mix(in srgb, var(--tile-color) 54%, transparent);
+  transform: translateY(-3px);
+}
+
+.dataset-orbit-tile__icon {
+  display: grid;
+  width: 27px;
+  height: 27px;
+  grid-row: span 2;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--tile-tint);
+  color: color-mix(in srgb, var(--tile-color) 70%, #12304b);
+}
+
+.dataset-orbit-tile__name {
+  overflow: hidden;
+  align-self: end;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+}
+
+.dataset-orbit-tile strong {
+  align-self: start;
+  color: color-mix(in srgb, var(--tile-color) 66%, #12304b);
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.dataset-hub-readout {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  min-width: 130px;
+  justify-items: center;
+  gap: 4px;
+  padding: 9px 12px;
+  border: 1px solid rgba(91, 189, 255, 0.28);
+  border-radius: 7px;
+  background: rgba(4, 22, 45, 0.84);
+  color: #e7f5ff;
+  box-shadow: 0 0 28px rgba(16, 133, 255, 0.19);
+  pointer-events: none;
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+}
+
+.dataset-hub-readout__eyebrow { color: #69d8f5; font-size: 8px; }
+.dataset-hub-readout strong { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 22px; line-height: 1.05; }
+.dataset-hub-readout > span:last-child { color: #96b6d1; font-size: 9px; }
+
+.dataset-hub__summary {
+  position: absolute;
+  z-index: 3;
+  right: 18px;
+  bottom: 20px;
+  left: 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 62px;
+  padding: 10px 12px;
+  border: 1px solid rgba(104, 161, 214, 0.22);
+  border-radius: 8px;
+  background: rgba(7, 19, 33, 0.83);
+  backdrop-filter: blur(12px);
+}
+
+.dataset-hub__summary-count {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #73d8f3;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 13px;
+}
+
+.dataset-hub__summary-copy { display: grid; min-width: 0; flex: 1; gap: 3px; }
+.dataset-hub__summary-copy strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.dataset-hub__summary-copy span { color: #92abc0; font-size: 10px; }
+
+.dataset-hub__summary > button {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgba(83, 200, 237, 0.35);
+  border-radius: 6px;
+  background: rgba(38, 198, 218, 0.12);
+  color: #8de9ff;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.dataset-hub__summary > button:hover:not(:disabled) { background: #26c6da; color: #071321; }
+.dataset-hub__summary > button:disabled { cursor: not-allowed; opacity: 0.45; }
+
+.dataset-hub__orbit-caption {
+  position: absolute;
+  z-index: 2;
+  right: 20px;
+  bottom: 96px;
+  color: rgba(167, 200, 224, 0.7);
+  font-size: 8px;
+  pointer-events: none;
+}
+
+.dataset-hub__orbit-caption span { padding: 0 5px; color: #45c9ed; }
+
+@keyframes dataset-pulse {
+  50% { opacity: 0.45; }
+}
+
+@media (max-width: 700px) {
+  .dataset-hub__canvas { height: 510px; min-height: 510px; }
+  .dataset-orbit-tile { width: clamp(80px, 22vw, 108px); min-height: 62px; grid-template-columns: 19px 1fr; gap: 4px 6px; padding: 7px; }
+  .dataset-orbit-tile__icon { width: 19px; height: 19px; }
+  .dataset-orbit-tile__icon svg { width: 14px; height: 14px; }
+  .dataset-orbit-tile__name { font-size: 8px; }
+  .dataset-orbit-tile strong { font-size: 11px; }
+  .dataset-hub__orbit { inset: 4px 0 12px; }
+  .dataset-hub__summary { right: 10px; bottom: 12px; left: 10px; }
+  .dataset-hub__orbit-caption { right: 12px; bottom: 83px; font-size: 7px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dataset-hub__status i { animation: none; }
+}

@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import {
-  Activity, AlertTriangle, BarChart3, BookOpen, Box, CheckCircle2, ChevronLeft,
+  Activity, AlertTriangle, BarChart3, BookOpen, Box, ChevronLeft,
   ClipboardCheck, ClipboardList, FileBarChart, FileText, Gauge, LayoutDashboard,
-  LogOut, Menu, RefreshCw, Search, ShieldCheck, Target, UserRound, Users, Wrench,
+  LogOut, Menu, Search, ShieldCheck, Target, UserRound, Users, Wrench,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { AuthGate } from '@/components/AuthGate'
+import { InteractiveDatasetScene } from '@/components/InteractiveDatasetScene'
 import { InteractiveRecordsPage } from '@/components/InteractiveRecordsPage'
 import { localAuth } from '@/lib/local-auth'
 import { qaqcApi, type LocalUser, type QaqcRecord, type QaqcSummary } from '@/lib/qaqc-api'
@@ -68,7 +69,7 @@ function CommandCentre() {
         <div className="flex min-w-0 items-center gap-2"><Button variant="ghost" size="icon" className="md:hidden" onClick={() => setMobileNav(true)} aria-label="Open navigation"><Menu className="size-5" /></Button><Button variant="ghost" size="icon" className="hidden md:inline-flex" onClick={() => setCollapsed(value => !value)} aria-label="Collapse navigation"><ChevronLeft className={cn('size-5 transition-transform', collapsed && 'rotate-180')} /></Button><div className="min-w-0"><p className="font-mono text-[10px] font-semibold tracking-[0.18em] text-primary">EVOMEC / QUALITY SYSTEM</p><h1 className="truncate text-lg font-semibold">{module === 'Overview' ? 'QA/QC Command Centre' : module}</h1></div></div>
         <div className="flex items-center gap-2"><select aria-label="Current project" value={project} onChange={event => setProject(event.target.value)} className="h-9 max-w-52 rounded-md border border-border bg-card px-2 text-xs"><option>All Projects</option>{projects.map(name => <option key={name}>{name}</option>)}</select><span className="hidden font-mono text-[10px] uppercase tracking-wide text-muted-foreground sm:block">{user?.role || 'user'}</span></div>
       </header>
-      <div className="mx-auto max-w-[1700px] p-4 sm:p-7">{recordModules.has(module) && <div className="mb-5 flex items-center gap-3"><div className="relative flex-1"><Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" /><Input value={search} onChange={event => setSearch(event.target.value)} className="pl-9" placeholder="Search current records" /></div></div>}<PageContent module={module} project={project} search={search} user={user} /></div>
+      <div className="mx-auto max-w-[1700px] p-4 sm:p-7">{recordModules.has(module) && <div className="mb-5 flex items-center gap-3"><div className="relative flex-1"><Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" /><Input value={search} onChange={event => setSearch(event.target.value)} className="pl-9" placeholder="Search current records" /></div></div>}<PageContent module={module} project={project} search={search} user={user} onOpenDataset={name => { const item = datasetGroups.flatMap(group => group.items).find(dataset => dataset.label === name); if (item) chooseModule(item.label) }} /></div>
     </main>
   </div></AuthGate>
 }
@@ -82,8 +83,8 @@ function Sidebar({ module, chooseModule, collapsed, user }: { module: ModuleKey;
     <div className="mt-auto border-t border-sidebar-border pt-3">{!collapsed && <p className="mb-1 px-3 font-mono text-[9px] font-semibold tracking-[0.16em] text-muted-foreground">SESSION</p>}<button type="button" onClick={() => { void localAuth.signOut() }} className="flex min-h-9 w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"><LogOut className="size-4 shrink-0" />{!collapsed && <span>Sign out</span>}</button></div></div>
 }
 
-function PageContent({ module, project, search, user }: { module: ModuleKey; project: string; search: string; user: LocalUser | null }) {
-  if (module === 'Overview') return <Overview project={project} />
+function PageContent({ module, project, search, user, onOpenDataset }: { module: ModuleKey; project: string; search: string; user: LocalUser | null; onOpenDataset: (name: string) => void }) {
+  if (module === 'Overview') return <Overview project={project} onOpenDataset={onOpenDataset} />
   if (recordModules.has(module)) return <InteractiveRecordsPage module={module} project={project} search={search} />
   if (module === 'User Profile') return <ProfileEditor />
   if (module === 'Activity Log') return <ActivityLog user={user} />
@@ -100,7 +101,7 @@ function useSummary(project: string) {
   return { summary, error, loading, refresh }
 }
 
-function Overview({ project }: { project: string }) {
+function Overview({ project, onOpenDataset }: { project: string; onOpenDataset: (name: string) => void }) {
   const { summary, error, loading, refresh } = useSummary(project)
   const modules = summary?.modules || {}
   const cards = [
@@ -111,7 +112,7 @@ function Overview({ project }: { project: string }) {
   return <div className="space-y-6"><section className="relative overflow-hidden rounded-2xl border border-primary/25 p-6 shadow-sm sm:p-8" style={{ background: 'radial-gradient(circle at 90% 0%, color-mix(in oklch, var(--primary) 18%, transparent), transparent 33rem), var(--card)' }}><div className="relative"><p className="font-mono text-[10px] font-semibold tracking-[0.18em] text-primary">LIVE QUALITY INTELLIGENCE</p><h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Quality performance under control.</h2><p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">Current workbook data across inspections, non-conformances, audits, calibration, and controlled records for {project === 'All Projects' ? 'all projects' : project}.</p></div></section>
     {error && <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">{error}</div>}
     <section><SectionTitle eyebrow="EXECUTIVE SIGNALS" title="Quality pulse" action={loading ? 'Refreshing…' : 'WORKBOOK CONNECTED'} /><div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">{cards.map(([label, stats]) => <MetricCard key={label} label={label} stats={stats} />)}</div></section>
-    <section><SectionTitle eyebrow="WORKBOOK DATASETS" title="Available operational datasets" /><div className="mt-3 overflow-x-auto rounded-xl border border-border bg-card"><table className="w-full text-left text-sm"><thead className="border-b border-border bg-muted/50 text-xs text-muted-foreground"><tr><th className="px-4 py-3 font-medium">Dataset</th><th className="px-4 py-3 text-right font-medium">Records</th></tr></thead><tbody className="divide-y divide-border">{summary?.datasets.map(dataset => <tr key={dataset.name} className="hover:bg-muted/20"><td className="px-4 py-3">{dataset.name}</td><td className="px-4 py-3 text-right font-mono">{dataset.records.toLocaleString()}</td></tr>)}{!loading && !summary?.datasets.length && <tr><td colSpan={2} className="px-4 py-6 text-center text-muted-foreground">No workbook datasets available.</td></tr>}</tbody></table></div></section>
+    <section><SectionTitle eyebrow="WORKBOOK DATASETS" title="Available operational datasets" /><div className="mt-3"><InteractiveDatasetScene datasets={(summary?.datasets || []).map(dataset => ({ ...dataset, records: loading && !summary ? null : dataset.records }))} loading={loading} error={error} onOpenDataset={onOpenDataset} /></div></section>
   </div>
 }
 

@@ -30,15 +30,24 @@ const localStorePath = path.resolve(process.env.LOCAL_AUTH_STORE || path.join(pr
 const workbook = createWorkbookStore(workbookPath)
 const mongoClient = process.env.MONGODB_URI ? new MongoClient(process.env.MONGODB_URI) : null
 const sessions = new Map()
+const loginAttempts = new Map()
 const iterations = 310000
+const dummyAuthUser = { salt: 'qaqc-invalid-account-timing-salt', passwordHash: '0'.repeat(64) }
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } })
 
-app.use(express.json())
+app.disable('x-powered-by')
+app.use(express.json({ limit: '256kb', strict: true }))
 app.use((request, response, next) => {
-  const allowed = new Set(String(process.env.APP_ORIGIN || 'http://localhost:3000,http://localhost:5173').split(',').map(value => value.trim()).filter(Boolean))
+  response.setHeader('X-Content-Type-Options', 'nosniff')
+  response.setHeader('X-Frame-Options', 'DENY')
+  response.setHeader('Referrer-Policy', 'no-referrer')
+  response.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+  const allowed = new Set(String(process.env.APP_ORIGIN || 'http://localhost:5173').split(',').map(value => value.trim()).filter(Boolean))
   const origin = String(request.headers.origin || '')
-  if (origin && allowed.has(origin)) response.setHeader('Access-Control-Allow-Origin', origin)
-  else if (!origin) response.setHeader('Access-Control-Allow-Origin', 'http://localhost:3000')
+  if (origin && allowed.has(origin)) {
+    response.setHeader('Access-Control-Allow-Origin', origin)
+    response.setHeader('Vary', 'Origin')
+  } else if (origin) return response.sendStatus(403)
   response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
   response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS')
   if (request.method === 'OPTIONS') return response.sendStatus(204)
@@ -160,7 +169,10 @@ async function ensureBootstrapAdmin() {
 async function authenticate(request, response, next) {
   const token = String(request.headers.authorization || '').replace(/^Bearer\s+/i, '')
   const session = sessions.get(token)
-  if (!session || session.expiresAt < Date.now()) return response.status(401).json({ error: 'Authentication required.' })
+  if (!session || session.expiresAt < Date.now()) {
+    if (session) sessions.delete(token)
+    return response.status(401).json({ error: 'Authentication required.' })
+  }
   const users = await collection('users')
   const user = users ? await users.findOne(userLookup(session.userId)) : readJsonStore().users.find(item => userId(item) === session.userId)
   if (!user || user.status !== 'approved') return response.status(403).json({ error: 'Account approval is required.' })
@@ -203,8 +215,20 @@ app.get('/health', (_request, response) => {
 })
 app.post('/api/auth/login', async (request, response) => {
   const email = String(request.body.email || '').trim().toLowerCase(); const password = String(request.body.password || '')
+  const now = Date.now()
+  for (const [key, attempt] of loginAttempts) if (attempt.resetAt <= now) loginAttempts.delete(key)
+  const attemptKeys = [request.ip, `${request.ip}\u0000${email}`]
+  if (attemptKeys.some(key => (loginAttempts.get(key)?.count || 0) >= 5)) return response.status(429).json({ error: 'Too many sign-in attempts. Try again in 15 minutes.' })
   const user = await findUser(email)
-  if (!user || user.status !== 'approved' || !verifyPassword(password, user)) return response.status(401).json({ error: 'Invalid credentials or account not approved.' })
+  const passwordMatches = verifyPassword(password, user || dummyAuthUser)
+  if (!user || user.status !== 'approved' || !passwordMatches) {
+    for (const key of attemptKeys) {
+      const current = loginAttempts.get(key)
+      loginAttempts.set(key, { count: (current?.count || 0) + 1, resetAt: current?.resetAt > now ? current.resetAt : now + 15 * 60 * 1000 })
+    }
+    return response.status(401).json({ error: 'Invalid credentials or account not approved.' })
+  }
+  for (const key of attemptKeys) loginAttempts.delete(key)
   const token = tokenFor(user)
   await recordActivity({ action: 'sign_in', category: 'authentication', request: { user }, status: 'success' })
   response.json({ token, user: publicUser(user) })
@@ -306,7 +330,36 @@ app.get('/api/support/tickets', authenticate, async (request, response) => {
 })
 app.get('/api/projects', authenticate, (_request, response) => { try { response.json(workbook.projects()) } catch (error) { response.status(500).json({ error: error.message }) } })
 app.get('/api/summary', authenticate, (request, response) => { try { response.json(workbook.summary(String(request.query.project || 'All Projects'))) } catch (error) { response.status(500).json({ error: error.message }) } })
-app.get('/api/records', authenticate, (request, response) => { try { const moduleName = String(request.query.module || ''); const project = String(request.query.project || 'All Projects'); response.json(workbook.filterProject(workbook.rowsForModule(moduleName), project)) } catch (error) { response.status(500).json({ error: error.message }) } })
+app.get('/api/record-fields', authenticate, (request, response) => {
+  try {
+    const module = String(request.query.module || '')
+    response.json(workbook.fieldsForModule(module))
+  } catch (error) {
+    response.status(400).json({ error: error.message })
+  }
+})
+app.get('/api/records', authenticate, (request, response) => { try { const moduleName = String(request.query.module || ''); const project = String(request.query.project || 'All Projects'); const rows = workbook.rowsForModule(moduleName); response.json(moduleName === 'KPI KRA Register' ? workbook.filterKpiProject(rows, project) : workbook.filterProject(rows, project)) } catch (error) { response.status(500).json({ error: error.message }) } })
+app.post('/api/records', requireAdmin, async (request, response) => {
+  try {
+    const module = String(request.body?.module || '')
+    const result = workbook.addRecord({ module, record: request.body?.record })
+    await recordActivity({ action: 'create_workbook_record', category: 'workbook', request, target: `${result.sheetName}:${result.rowNumber}`, details: { module, fields: result.fields } })
+    response.status(201).json({ ok: true, record: result })
+  } catch (error) {
+    response.status(400).json({ error: error instanceof Error ? error.message : 'Unable to add the workbook record.' })
+  }
+})
+app.patch('/api/records/:sheetName/:rowNumber', requireAdmin, async (request, response) => {
+  try {
+    const rowNumber = Number(request.params.rowNumber)
+    const module = String(request.body?.module || '')
+    const result = workbook.updateRecord({ module, sheetName: request.params.sheetName, rowNumber, record: request.body?.record })
+    await recordActivity({ action: 'update_workbook_record', category: 'workbook', request, target: `${result.sheetName}:${result.rowNumber}`, details: { module, fields: result.fields } })
+    response.json({ ok: true, record: result })
+  } catch (error) {
+    response.status(400).json({ error: error instanceof Error ? error.message : 'Unable to update the workbook record.' })
+  }
+})
 app.patch('/api/records/:sheetName/:rowNumber/date', requireAdmin, async (request, response) => {
   try {
     const rowNumber = Number(request.params.rowNumber)
