@@ -13,7 +13,7 @@ The Command Centre has two connected front ends over the same QA/QC workbook and
 3. Keep `QAQC_EXCEL_PATH=data/QAQC_Master.xlsx` unless the workbook is stored elsewhere. Relative paths are resolved from this project directory.
 4. Set `VITE_QAQC_API_URL=http://localhost:8000` for a separately hosted API, or leave it blank to use the Vite `/api` proxy during local development.
 
-The configured bootstrap administrator is created/approved automatically by both the API and Streamlit app. Profile photos are optional; to enable them, set `CLOUDINARY_URL` to `cloudinary://API_KEY:API_SECRET@CLOUD_NAME`.
+The configured bootstrap administrator is created/approved automatically by both the API and Streamlit app. Profile photos are stored in Cloudinary; configure either a complete `CLOUDINARY_URL` (`cloudinary://API_KEY:API_SECRET@CLOUD_NAME`) or all three server-side values `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`. Never expose Cloudinary secrets in React/Vite variables.
 
 ## Run locally on Windows
 

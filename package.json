@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "api:dev": "node server/index.mjs",
-    "test": "node --test server/workbook.test.mjs",
+    "test": "node --test server/*.test.mjs",
     "streamlit": "py -3 -m streamlit run app.py --server.port 8501",
     "streamlit:headless": "py -3 -m streamlit run app.py --server.headless true --server.port 8501",
     "start": "vite preview",

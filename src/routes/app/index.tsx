@@ -190,6 +190,21 @@ function ProfileEditor() {
       setSaving(false)
     }
   }
+  const selectPhoto = (file?: File) => {
+    setMessage('')
+    if (!file) { setPhoto(null); return }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setPhoto(null)
+      setMessage('Choose a JPG, PNG, or WebP image.')
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setPhoto(null)
+      setMessage('Profile photos must be 5 MB or smaller.')
+      return
+    }
+    setPhoto(file)
+  }
 
   return <div className="space-y-6">
     <SectionTitle eyebrow="SYSTEM / USER PROFILE" title="User profile" action="Personal account" />
@@ -201,7 +216,7 @@ function ProfileEditor() {
         <label className="block text-sm font-medium">Discipline<Input value={discipline} onChange={event => setDiscipline(event.target.value)} className="mt-2" placeholder="Optional" /></label>
       </div>
       <Button disabled={saving || !displayName.trim()} onClick={() => { void saveProfile() }} className="bg-primary text-primary-foreground">Save profile</Button>
-      <div className="border-t border-border pt-5"><label className="block text-sm font-medium">Profile photo<input type="file" accept="image/png,image/jpeg,image/webp" onChange={event => setPhoto(event.target.files?.[0] || null)} className="mt-2 block text-sm" /></label><Button disabled={saving || !photo} onClick={() => { void upload() }} className="mt-3 bg-primary text-primary-foreground">Upload photo</Button></div>
+      <div className="border-t border-border pt-5"><p className="text-sm font-medium">Profile photo</p>{profile && <p role="status" className={profile.profilePhotoUploadEnabled ? 'mt-1 text-xs text-emerald-400' : 'mt-1 text-xs text-amber-400'}>{profile.profilePhotoUploadEnabled ? 'Cloudinary storage is ready.' : 'Cloudinary storage is not configured on the API server.'}</p>}<label className="mt-3 block text-xs text-muted-foreground">Choose JPG, PNG, or WebP (maximum 5 MB)<input type="file" accept="image/png,image/jpeg,image/webp" onChange={event => selectPhoto(event.target.files?.[0])} className="mt-2 block w-full text-sm" /></label>{photo && <p className="mt-2 truncate text-xs text-muted-foreground">Selected: {photo.name}</p>}<Button disabled={saving || !photo || !profile?.profilePhotoUploadEnabled} onClick={() => { void upload() }} className="mt-3 bg-primary text-primary-foreground">{saving ? 'Uploading…' : 'Upload to Cloudinary'}</Button></div>
       {message && <p role="status" className="rounded-lg border border-primary/30 bg-primary/10 p-3 text-sm text-primary">{message}</p>}
     </CardContent></Card>
   </div>

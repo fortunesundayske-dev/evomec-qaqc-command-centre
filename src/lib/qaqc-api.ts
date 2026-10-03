@@ -8,6 +8,7 @@ export type LocalUser = {
   discipline?: string
   role: string
   status: string
+  profilePhotoUploadEnabled?: boolean
   profilePhoto?: Record<string, QaqcValue> | null
   profilePhotoUrl?: string
 }

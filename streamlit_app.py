@@ -365,19 +365,27 @@ def current_user_record(user):
     return user_collection().find_one(account_query(user)) or user
 
 
-def configure_cloudinary():
+def cloudinary_config_values():
+    cloud_name = setting("CLOUDINARY_CLOUD_NAME")
+    api_key = setting("CLOUDINARY_API_KEY")
+    api_secret = setting("CLOUDINARY_API_SECRET")
+    if cloud_name and api_key and api_secret:
+        return {"cloud_name": cloud_name, "api_key": api_key, "api_secret": api_secret, "secure": True}
+
     cloudinary_url = setting("CLOUDINARY_URL")
     if not cloudinary_url:
-        raise RuntimeError("CLOUDINARY_URL is not configured.")
+        return None
     parsed = urlparse(cloudinary_url)
     if parsed.scheme != "cloudinary" or not parsed.hostname or not parsed.username or not parsed.password:
-        raise RuntimeError("CLOUDINARY_URL is invalid.")
-    cloudinary.config(
-        cloud_name=parsed.hostname,
-        api_key=unquote(parsed.username),
-        api_secret=unquote(parsed.password),
-        secure=True,
-    )
+        return None
+    return {"cloud_name": parsed.hostname, "api_key": unquote(parsed.username), "api_secret": unquote(parsed.password), "secure": True}
+
+
+def configure_cloudinary():
+    config = cloudinary_config_values()
+    if not config:
+        raise RuntimeError("Configure CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET, or provide a complete CLOUDINARY_URL.")
+    cloudinary.config(**config)
 
 
 def profile_photo_url(asset: dict | None) -> str:
@@ -434,8 +442,12 @@ def render_profile(user):
         photo_url = ""
     if photo_url:
         st.image(photo_url, width=120)
+    if cloudinary_config_values():
+        st.caption("Profile photo storage is connected to Cloudinary.")
+    else:
+        st.warning("Profile photo storage is not configured. Set the Cloudinary credentials in Streamlit secrets or the server environment.")
     uploaded_photo = st.file_uploader("Profile photo", type=["jpg", "jpeg", "png", "webp"], help="Maximum 5 MB. Stored in Cloudinary.")
-    if st.button("Upload profile photo", disabled=uploaded_photo is None, type="secondary"):
+    if st.button("Upload profile photo", disabled=uploaded_photo is None or not cloudinary_config_values(), type="secondary"):
         try:
             saved_asset = upload_profile_photo(record, uploaded_photo)
             log_activity(record, "upload_profile_photo", "account", {"public_id": saved_asset["public_id"]})

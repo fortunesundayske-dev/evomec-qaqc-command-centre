@@ -7,18 +7,20 @@ import { fileURLToPath } from 'node:url'
 import { createHash, randomBytes, pbkdf2Sync, timingSafeEqual } from 'node:crypto'
 import XLSX from 'xlsx'
 import { Int32, MongoClient } from 'mongodb'
+import { isValidCloudinaryUrl, resolveCloudinaryConfig } from './cloudinary-config.mjs'
 import { createWorkbookStore } from './workbook.mjs'
 
 // The Cloudinary package parses CLOUDINARY_URL during import and throws before the
 // API can start when a partially entered value is present. Validate first so the
 // optional profile-photo feature is disabled cleanly while the Command Centre and
 // workbook API remain available.
-const cloudinaryUrlPattern = /^cloudinary:\/\/[^:@/\s]+:[^@/\s]+@[^@/\s]+$/
-if (process.env.CLOUDINARY_URL && !cloudinaryUrlPattern.test(process.env.CLOUDINARY_URL)) {
-  console.warn('CLOUDINARY_URL is invalid; profile photo uploads are disabled until it is corrected. Expected form: cloudinary://API_KEY:API_SECRET@CLOUD_NAME')
+if (process.env.CLOUDINARY_URL && !isValidCloudinaryUrl(process.env.CLOUDINARY_URL)) {
+  console.warn('CLOUDINARY_URL is incomplete; configure CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET to enable profile photos.')
   delete process.env.CLOUDINARY_URL
 }
 const { v2: cloudinary } = await import('cloudinary')
+const initialCloudinaryConfig = resolveCloudinaryConfig(process.env)
+if (initialCloudinaryConfig) cloudinary.config(initialCloudinaryConfig)
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const projectRoot = path.resolve(__dirname, '..')
@@ -93,10 +95,18 @@ function userId(user) {
 function userLookup(id) {
   return { $or: [{ id }, { username: id }, { email: id }] }
 }
+function matchesImageSignature(file) {
+  const buffer = file.buffer
+  if (file.mimetype === 'image/jpeg') return buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff
+  if (file.mimetype === 'image/png') return buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  if (file.mimetype === 'image/webp') return buffer.length >= 12 && buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP'
+  return false
+}
 function signedProfilePhotoUrl(asset) {
-  if (!asset?.public_id || !process.env.CLOUDINARY_URL) return ''
+  const config = resolveCloudinaryConfig(process.env)
+  if (!asset?.public_id || !config) return ''
   try {
-    cloudinary.config({ secure: true })
+    cloudinary.config(config)
     return cloudinary.url(asset.public_id, { secure: true, type: 'authenticated', resource_type: 'image', sign_url: true })
   } catch {
     return ''
@@ -115,6 +125,7 @@ function publicUser(user) {
     discipline: user.discipline || '',
     role: user.role,
     status: user.status,
+    profilePhotoUploadEnabled: Boolean(resolveCloudinaryConfig(process.env)),
     profilePhoto: user.profile_photo_asset || null,
     profilePhotoUrl: signedProfilePhotoUrl(user.profile_photo_asset),
   }
@@ -270,9 +281,11 @@ app.patch('/api/profile', authenticate, async (request, response) => {
 app.post('/api/profile/photo', authenticate, upload.single('photo'), async (request, response) => {
   if (!request.file) return response.status(400).json({ error: 'A profile photo is required.' })
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(request.file.mimetype)) return response.status(400).json({ error: 'Only JPG, PNG, or WebP images are allowed.' })
-  if (!process.env.CLOUDINARY_URL) return response.status(503).json({ error: 'Profile photos are unavailable until CLOUDINARY_URL uses the form cloudinary://API_KEY:API_SECRET@CLOUD_NAME.' })
+  if (!matchesImageSignature(request.file)) return response.status(400).json({ error: 'The uploaded file does not match its image type.' })
+  const cloudinaryConfig = resolveCloudinaryConfig(process.env)
+  if (!cloudinaryConfig) return response.status(503).json({ error: 'Profile photo storage is not configured. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET on the API server.' })
   try {
-    cloudinary.config({ secure: true })
+    cloudinary.config(cloudinaryConfig)
     const username = String(request.user.username || request.user.email).replace(/[^a-zA-Z0-9_-]/g, '-')
     const folder = process.env.CLOUDINARY_FOLDER || 'qaqc-command-centre'
     const result = await new Promise((resolve, reject) => {
