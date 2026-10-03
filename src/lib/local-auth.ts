@@ -4,6 +4,11 @@ const sessionKey = 'evomec_qaqc_session'
 const userKey = 'evomec_qaqc_user'
 const authEvent = 'evomec-auth-change'
 
+function storeUser(user: LocalUser) {
+  localStorage.setItem(userKey, JSON.stringify(user))
+  window.dispatchEvent(new Event(authEvent))
+}
+
 export const localAuth = {
   getToken: () => typeof window === 'undefined' ? null : localStorage.getItem(sessionKey),
   getUser: (): LocalUser | null => {
@@ -14,9 +19,11 @@ export const localAuth = {
   async signIn(email: string, password: string) {
     const result = await qaqcApi.auth.login(email, password)
     localStorage.setItem(sessionKey, result.token)
-    localStorage.setItem(userKey, JSON.stringify(result.user))
-    window.dispatchEvent(new Event(authEvent))
+    storeUser(result.user)
     return result.user
+  },
+  setUser(user: LocalUser) {
+    storeUser(user)
   },
   async requestAccess(email: string, password: string, displayName: string) {
     return qaqcApi.auth.requestAccess(email, password, displayName)
@@ -25,8 +32,7 @@ export const localAuth = {
     return qaqcApi.auth.requestReset(email)
   },
   async signOut() {
-    const token = localStorage.getItem(sessionKey)
-    if (token) await qaqcApi.auth.logout(token).catch(() => undefined)
+    if (localStorage.getItem(sessionKey)) await qaqcApi.auth.logout().catch(() => undefined)
     localStorage.removeItem(sessionKey)
     localStorage.removeItem(userKey)
     window.dispatchEvent(new Event(authEvent))

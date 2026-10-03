@@ -270,10 +270,38 @@ export default defineConfig({
     ],
   },
   server: {
-    port: 3000,
+    // Grafana commonly owns port 3000 on this machine. 5173 is already allowed
+    // by the API CORS fallback, so the dashboard can start without a collision.
+    port: 5173,
     strictPort: true,
     host: true,
     allowedHosts: true,
+    proxy: {
+      // Lets a local web build use relative /api requests without a separate CORS
+      // setting. A configured VITE_QAQC_API_URL still takes precedence in the client.
+      '/api': {
+        target: process.env.QAQC_API_PROXY_TARGET || 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      '/health': {
+        target: process.env.QAQC_API_PROXY_TARGET || 'http://localhost:8000',
+        changeOrigin: true,
+      },
+    },
+  },
+  preview: {
+    port: 4173,
+    strictPort: true,
+    proxy: {
+      '/api': {
+        target: process.env.QAQC_API_PROXY_TARGET || 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      '/health': {
+        target: process.env.QAQC_API_PROXY_TARGET || 'http://localhost:8000',
+        changeOrigin: true,
+      },
+    },
   },
   build: {
     // Build into a clean temp dir; scripts/finalize-static-build.mjs then flattens
